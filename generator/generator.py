@@ -1,9 +1,10 @@
+import argparse
 import re
-import sys
 from pathlib import Path
 
-import util.leetcode as lc
 from jinja2 import Environment, FileSystemLoader
+
+import util.leetcode as lc
 
 ROW_SIZE = 120
 
@@ -11,11 +12,9 @@ _CUR_DIR_ = Path(__file__).parent.resolve()
 OUTPUT_PATH = _CUR_DIR_.parent.joinpath('leetcode/src/main/java/com/github/vvv1559/algorithms/leetcode')
 
 
-def create_java_file(url):
-    question_content = lc.get_question_content(url)
-
+def create_java_file(url, question_content):
     env = Environment(loader=FileSystemLoader(_CUR_DIR_))
-    template = env.get_template('template.jinja2')
+    template = env.get_template('template-java.jinja2')
     class_name = build_class_name(question_content.get('title'))
 
     for snippet in question_content.get('codeSnippets'):
@@ -23,7 +22,7 @@ def create_java_file(url):
             parts = {
                 'difficulty': question_content.get('difficulty').lower(),
                 'title': question_content.get('title'),
-                'description': cleanup_content(question_content.get('content')),
+                'description': cleanup_java_content(question_content.get('content')),
                 'originalLink': url,
                 'className': class_name,
                 'code': snippet.get('code').replace('Solution', class_name)
@@ -31,6 +30,30 @@ def create_java_file(url):
 
             file_content = template.render(parts)
             result_file = "{}/{}.java".format(OUTPUT_PATH, class_name)
+            with open(result_file, "w+") as f:
+                f.write(file_content)
+
+
+def create_md_file(url, question_content):
+    env = Environment(loader=FileSystemLoader(_CUR_DIR_))
+    template = env.get_template('template-md.jinja2')
+
+    for snippet in question_content.get('codeSnippets'):
+        if snippet.get('langSlug') == 'java':
+            parts = {
+                'difficulty': question_content.get('difficulty').lower(),
+                'title': '{}. {}'.format(question_content.get('questionId'), question_content.get('title')),
+                'description': cleanup_md_content(question_content.get('content')),
+                'originalLink': url,
+                'code': snippet.get('code')
+            }
+
+            file_content = template.render(parts)
+            result_file = "{}/{}.{}.md".format(
+                OUTPUT_PATH,
+                question_content.get('questionId'),
+                question_content.get('titleSlug')
+            )
             with open(result_file, "w+") as f:
                 f.write(file_content)
 
@@ -44,7 +67,7 @@ def build_class_name(title):
     return ''.join(parts)
 
 
-def cleanup_content(content):
+def cleanup_java_content(content):
     content = content.replace('\n', '') \
         .replace('&nbsp;', '') \
         .replace('<p>', '\r') \
@@ -71,6 +94,35 @@ def cleanup_content(content):
     return '\n'.join(result)
 
 
+def cleanup_md_content(content):
+    return content.replace('<strong>Input:</strong>', 'Input:') \
+        .replace('<strong>Output:</strong>', 'Output:') \
+        .replace('<strong>', '**') \
+        .replace('</strong>', '**') \
+        .replace('<pre>', '> ') \
+        .replace('</pre>', '') \
+        .replace('**Example', '\n**Example') \
+        .replace('&nbsp;', '') \
+        .replace('<ul>', '') \
+        .replace('</ul>', '') \
+        .replace('<li>', '* ') \
+        .replace('</li>', ' ') \
+        .replace('<code>', '`') \
+        .replace('</code>', '`') \
+        .replace('\t', '') \
+        .replace('<p>', '') \
+        .replace('</p>', '  ')
+
+
 if __name__ == '__main__':
-    url = sys.argv[1]
-    create_java_file(url)
+    parser = argparse.ArgumentParser(
+        description='This tool used for the generation of template files for LeetCode tasks')
+    parser.add_argument('type', choices=['md', 'java'], help='Type of the output file')
+    parser.add_argument('url', help='URL of the question')
+
+    args = parser.parse_args()
+    content = lc.get_question_content(args.url)
+    if args.type == 'md':
+        create_md_file(args.url, content)
+    else:
+        create_java_file(args.url, content)
